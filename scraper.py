@@ -8,6 +8,9 @@ ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
 
+# 관심 없는 공고 키워드 (대관, 공실 등)
+EXCLUSION_KEYWORDS = ["대관", "공실", "세미나실", "교육실", "연습실", "갤러리카페", "카페대관"]
+
 def fetch_html(url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -41,7 +44,12 @@ def clean_text(text):
     # Remove starting prefixes like "진 ", "예 ", "미 ", "2026년 "
     text = re.sub(r'^(진|예|미|진행중|예정|마감)\s+', '', text)
     text = re.sub(r'^\d{4}년?\s*', '', text) 
+    # Remove common repetitive words
+    text = text.replace("수시대관", "").replace("정기대관", "").strip()
     return text.strip()
+
+def should_exclude(title):
+    return any(keyword in title for keyword in EXCLUSION_KEYWORDS)
 
 def parse_date(text):
     if not text: return "9999-12-31"
@@ -73,6 +81,8 @@ def extract_titles_arko():
             title = clean_text(title_match.group(1))
             if not title or len(title) < 5 or any(x in title for x in ["결과", "기록물", "선정"]):
                 continue
+            if should_exclude(title):
+                continue
             
             # 날짜 추출: .con 에 기간 정보가 있는 경우가 많음
             deadline = "9999-12-31"
@@ -100,7 +110,7 @@ def extract_titles_sfac():
         
         if title_match:
             title = clean_text(title_match.group(1))
-            if "결과" in title or len(title) < 5:
+            if "결과" in title or len(title) < 5 or should_exclude(title):
                 continue
             # SFAC list doesn't show deadline, using far future for sorting if not found
             results.append({"source": "서울문화재단", "title": title, "deadline": "9999-12-31"})
@@ -117,8 +127,8 @@ def extract_titles_ggcf():
             title_match = re.search(r'<p[^>]*class="[^"]*tit[^"]*"[^>]*>(.*?)</p>', item, re.DOTALL)
             if title_match:
                 title = clean_text(title_match.group(1))
-                if not any(x in title for x in ["결과", "선정", "종료", "안내"]):
-                    date_match = re.search(r'(\d{4}\.\d{2}\.\d{2})', item)
+                if not any(x in title for x in ["결과", "선정", "종료", "안내"]) and not should_exclude(title):
+                    date_match = re.search(r'(\d{4}\.\d{2}\.\d.2})', item)
                     deadline = date_match.group(1) if date_match else "9999-12-31"
                     results.append({"source": "경기문화재단", "title": title, "deadline": parse_date(deadline)})
     return results
@@ -132,7 +142,7 @@ def extract_titles_artnuri():
     for match in re.finditer(r'<a[^>]*class="title"[^>]*>(.*?)</a>', html, re.DOTALL):
         title_raw = match.group(1)
         title = clean_text(title_raw)
-        if not title or len(title) < 3 or title in seen_titles: continue
+        if not title or len(title) < 3 or title in seen_titles or should_exclude(title): continue
         seen_titles.add(title)
         
         # 타이틀 주변 (뒤쪽 1000자)에서 마감일 검색
