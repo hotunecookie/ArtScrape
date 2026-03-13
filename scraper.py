@@ -177,7 +177,13 @@ def main():
 
     print(combined_text)
     
-    data = {"text": combined_text}
+    # 구조화된 데이터 저장 (제미나이 요약용)
+    data = {
+        "text": combined_text,
+        "items": sorted_items,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
     with open("news.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     print("Saved to news.json")
