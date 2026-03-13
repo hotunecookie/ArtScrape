@@ -24,15 +24,40 @@ def fetch_html(url):
         print(f"Error fetching {url}: {e}")
         return ""
 
+def strip_tags(text):
+    # Just remove tags, keep all content
+    return re.sub(r'<[^>]+>', ' ', text)
+
 def clean_text(text):
-    text = re.sub(r'<[^>]+>', '', text)
+    # Remove status spans like <span class="status-진">진</span> or <span class="state-st2 ...">...</span>
+    # These often contain "진", "예", "미" etc.
+    text = re.sub(r'<span[^>]*class="[^"]*(status|state)[^"]*"[^>]*>.*?</span>', '', text, flags=re.IGNORECASE)
+    # Remove remaining HTML tags
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # Replace whitespace/newlines
     text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
-    return re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Remove starting prefixes like "진 ", "예 ", "미 ", "2026년 "
+    text = re.sub(r'^(진|예|미|진행중|예정|마감)\s+', '', text)
+    text = re.sub(r'^\d{4}년?\s*', '', text) 
+    return text.strip()
 
 def parse_date(text):
+    if not text: return "9999-12-31"
+    # Just remove tags
+    text = strip_tags(text)
+    
+    # YYYY-MM-DD or YYYY.MM.DD
     match = re.search(r'(\d{4})[-.](\d{1,2})[-.](\d{1,2})', text)
     if match:
         return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+    
+    # YYYY년 MM월 DD일
+    match = re.search(r'(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일', text)
+    if match:
+        return f"{match.group(1)}-{int(match.group(2)):02d}-{int(match.group(3)):02d}"
+        
     return "9999-12-31"
 
 def extract_titles_arko():
@@ -40,18 +65,26 @@ def extract_titles_arko():
     html = fetch_html(url)
     results = []
     
-    items = re.findall(r'<li>\s*<a href="(/board/view/[^"]+)">(.*?)</a>\s*</li>', html, re.DOTALL)
-    for link, content in items:
+    # <li> 안에 <a> 가 있고 제목은 <span class="tit">
+    items = re.findall(r'<li>\s*<a[^>]*>(.*?)</a>\s*</li>', html, re.DOTALL)
+    for content in items:
         title_match = re.search(r'<span[^>]*class="tit"[^>]*>(.*?)</span>', content, re.DOTALL)
         if title_match:
             title = clean_text(title_match.group(1))
-            if "결과" in title or "상세보기" in title or len(title) < 5:
+            if not title or len(title) < 5 or any(x in title for x in ["결과", "기록물", "선정"]):
                 continue
             
-            # Extract date from con/text if available, otherwise fallback
-            date_text = re.search(r'(\d{4}[-.]\d{1,2}[-.]\d{1,2})', content)
-            deadline = date_text.group(1) if date_text else "9999-12-31"
-            results.append({"source": "한국문화예술위원회", "title": title, "deadline": parse_date(deadline)})
+            # 날짜 추출: .con 에 기간 정보가 있는 경우가 많음
+            deadline = "9999-12-31"
+            date_matches = re.findall(r'(\d{4}[-.]\d{1,2}[-.]\d{1,2})|(\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일)', content)
+            if date_matches:
+                all_found = []
+                for m1, m2 in date_matches:
+                    dm = m1 if m1 else m2
+                    all_found.append(parse_date(dm))
+                deadline = max(all_found) if all_found else "9999-12-31"
+            
+            results.append({"source": "한국문화예술위원회", "title": title, "deadline": deadline})
     return results
 
 def extract_titles_sfac():
@@ -95,15 +128,19 @@ def extract_titles_artnuri():
     html = fetch_html(url)
     results = []
     
-    # Artnuri items usually in <li> or similar inside a list container
-    items = re.findall(r'<li>(.*?)</li>', html, re.DOTALL)
-    for item in items:
-        title_match = re.search(r'<a[^>]*class="title"[^>]*>(.*?)</a>', item, re.DOTALL)
-        if title_match:
-            title = clean_text(title_match.group(1))
-            date_match = re.search(r'마감일.*?<dd>(.*?)</dd>', item, re.DOTALL)
-            deadline = date_match.group(1) if date_match else "9999-12-31"
-            results.append({"source": "아트누리", "title": title, "deadline": parse_date(deadline)})
+    seen_titles = set()
+    for match in re.finditer(r'<a[^>]*class="title"[^>]*>(.*?)</a>', html, re.DOTALL):
+        title_raw = match.group(1)
+        title = clean_text(title_raw)
+        if not title or len(title) < 3 or title in seen_titles: continue
+        seen_titles.add(title)
+        
+        # 타이틀 주변 (뒤쪽 1000자)에서 마감일 검색
+        context = html[match.end():match.end()+1000]
+        date_match = re.search(r'마감일.*?<em>(.*?)</em>', context, re.DOTALL)
+        deadline = date_match.group(1) if date_match else "9999-12-31"
+        
+        results.append({"source": "아트누리", "title": title, "deadline": parse_date(deadline)})
     return results
 
 def main():
