@@ -8,8 +8,12 @@ ctx = ssl.create_default_context()
 ctx.check_hostname = False
 ctx.verify_mode = ssl.CERT_NONE
 
-# 관심 없는 공고 키워드 (대관, 공실 등)
-EXCLUSION_KEYWORDS = ["대관", "공실", "세미나실", "교육실", "연습실", "갤러리카페", "카페대관"]
+# 관심 없는 지원사업 키워드 (대관, 공간지원 등)
+EXCLUSION_KEYWORDS = [
+    "대관", "공실", "세미나실", "교육실", "연습실", "갤러리카페", "카페대관", 
+    "공간지원", "입주작가", "대관공고", "대관신청", "수시대관", "정기대관", "대관전시",
+    "공간 지원", "전시공간"
+]
 
 def fetch_html(url):
     headers = {
@@ -117,7 +121,8 @@ def extract_titles_sfac():
     return results
 
 def extract_titles_ggcf():
-    url = "https://www.ggcf.kr/boards/businessNotices/articles"
+    # 창작지원 카테고리(category=01) 필터 적용
+    url = "https://www.ggcf.kr/boards/businessNotices/articles?category=01"
     html = fetch_html(url)
     results = []
     
@@ -134,7 +139,9 @@ def extract_titles_ggcf():
     return results
 
 def extract_titles_artnuri():
-    url = "https://artnuri.or.kr/crawler/info/search.do?docid=&source=&pageSetting=1&sc_seNo=&key=2301170002&sc_orderBy=endDt&recordCountPerPage=100&pageIndex=1&sc_hash=&sc_list=&seNo=&sw=&sc_genre=%EC%8B%9C%EA%B0%81%EC%98%88%EC%88%A0&sc_genre=%EB%8B%A4%EC%9B%90%EC%98%88%EC%88%A0&sc_target=&sc_local=%EC%84%9C%EC%9A%B8&sc_local=%EA%B2%BD%EA%B8%B0&sc_field=&sc_isDo=I&sc_isDo=T&sc_isDo=U"
+    # 시각예술, 다원예술 / 서울, 경기 / 사업유형: 창작(sc_field=%EC%B0%BD%EC%9E%91) 필터 적용
+    # 공간·시설(대관) 관련 항목을 원천 배제하기 위해 sc_field 필터를 명시함
+    url = "https://artnuri.or.kr/crawler/info/search.do?docid=&source=&pageSetting=1&sc_seNo=&key=2301170002&sc_orderBy=endDt&recordCountPerPage=100&pageIndex=1&sc_hash=&sc_list=&seNo=&sw=&sc_genre=%EC%8B%9C%EA%B0%81%EC%98%88%EC%88%A0&sc_genre=%EB%8B%A4%EC%9B%90%EC%98%88%EC%88%A0&sc_target=&sc_local=%EC%84%9C%EC%9A%B8&sc_local=%EA%B2%BD%EA%B8%B0&sc_field=%EC%B0%BD%EC%9E%91&sc_isDo=I&sc_isDo=T&sc_isDo=U"
     html = fetch_html(url)
     results = []
     
