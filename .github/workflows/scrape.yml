@@ -8,8 +8,11 @@ on:
 jobs:
   scrape:
     runs-on: ubuntu-latest
+    permissions:          # <--- 이 줄 추가! (앞에 공백 4칸)
+      contents: write     # <--- 이 줄 추가! (앞에 공백 6칸)
     steps:
       - name: Checkout code
+
         uses: actions/checkout@v4
 
       - name: Set up Python
